@@ -69,7 +69,7 @@ def solve(sudoku):
     possibilities = {}
     for k in range(81):
         if k not in sudoku:
-            possibilities[k] = {1, 2, 3, 4, 5, 6, 7, 8, 9}
+            possibilities[k] = 0b111111111
     unknown = set(possibilities)
 
     # Mapping of indices that affects other indices
@@ -80,8 +80,19 @@ def solve(sudoku):
     # We remove the possibilities in same line/column/square
     for k, n in sudoku.items():
         for di_dj in neighbors[k]:
-            if n in possibilities[di_dj]:
-                possibilities[di_dj].remove(n)
+            possibilities[di_dj] &= 0b111111111 - (1 << (n - 1))
+
+    get_single_up_bit = {
+        0b000000001: 1,
+        0b000000010: 2,
+        0b000000100: 3,
+        0b000001000: 4,
+        0b000010000: 5,
+        0b000100000: 6,
+        0b001000000: 7,
+        0b010000000: 8,
+        0b100000000: 9,
+    }
 
     stack = [(sudoku, possibilities)]
     while stack:
@@ -93,12 +104,16 @@ def solve(sudoku):
         while True:
             updated = False
             for k in list(poss):
-                if len(poss[k]) == 1:
-                    state[k] = n = poss[k].pop()
+                try:
+                    n = get_single_up_bit[poss[k]]
+                except KeyError:
+                    pass
+                else:
+                    state[k] = n
                     del poss[k]  # remove from the possibilities
                     for di_dj in neighbors[k]:
-                        if di_dj in poss and n in poss[di_dj]:
-                            poss[di_dj].remove(n)
+                        if di_dj in poss and (poss[di_dj] >> (n - 1)) % 2 == 1:
+                            poss[di_dj] &= 0b111111111 - (1 << (n - 1))
                             updated = True
             if not updated:
                 break
@@ -109,10 +124,11 @@ def solve(sudoku):
             return
 
         # Find the place with fewest possibilities, and add those to the stack
-        min_k = min(poss, key=lambda k: len(poss[k]))
+        min_k = min(poss, key=lambda k: poss[k].bit_count())
 
         # At this time we might have an empty poss value if the sudoku is wrong
-        values = list(poss[min_k])
+        p = poss[min_k]
+        values = [n for n in range(1, 1 + p.bit_length()) if (p >> (n - 1)) % 2 == 1]
         if not values:
             continue
 
@@ -120,13 +136,13 @@ def solve(sudoku):
         for n in values[1:]:
             new_state = state.copy()
             new_state[min_k] = n
-            new_poss = {k: v.copy() for k, v in poss.items()}
-            new_poss[min_k].remove(n)
+            new_poss = poss.copy()
+            new_poss[min_k] &= 0b111111111 - (1 << (n - 1))
             stack.append((new_state, new_poss))
 
         # For the first value no need to copy we can reuse the current state
         state[min_k] = values[0]
-        poss[min_k].remove(values[0])
+        poss[min_k] &= 0b111111111 - (1 << (values[0] - 1))
         stack.append((state, poss))
 
     raise ValueError("Not solvable")

@@ -108,8 +108,7 @@ impl Sudoku {
         let mut possibilities = FxHashMap::default();
         for k in 0..81 {
             if self.data[k as usize] == 0 {
-                let values: FxHashSet<u8> = FxHashSet::from_iter(1..10);
-                possibilities.insert(k, values);
+                possibilities.insert(k, 0b111111111);
             }
         }
         let unknown: FxHashSet<u8> = possibilities.iter().map(|(&k, _)| k).collect();
@@ -124,11 +123,7 @@ impl Sudoku {
             let n = self.data[k as usize];
             if n != 0 {
                 for &di_dj in &neighbors[&k] {
-                    if possibilities[&di_dj].contains(&n) {
-                        if let Some(set) = possibilities.get_mut(&di_dj) {
-                            set.remove(&n);
-                        }
-                    }
+                    *possibilities.get_mut(&di_dj).unwrap() &= 0b111111111 - (1 << (n - 1));
                 }
             }
         }
@@ -141,17 +136,25 @@ impl Sudoku {
                 let mut updated = false;
                 let poss_keys: Vec<u8> = poss.keys().map(|&u| u).collect();
                 for &k in &poss_keys {
-                    let set = poss.get(&k).unwrap();
-                    if set.len() == 1 {
-                        let n = *set.iter().next().unwrap();
+                    let n = match poss.get(&k).unwrap() {
+                        0b000000001 => 1,
+                        0b000000010 => 2,
+                        0b000000100 => 3,
+                        0b000001000 => 4,
+                        0b000010000 => 5,
+                        0b000100000 => 6,
+                        0b001000000 => 7,
+                        0b010000000 => 8,
+                        0b100000000 => 9,
+                        _ => 0
+                    };
+                    if n != 0 {
                         state.data[k as usize] = n;
                         poss.remove(&k);
                         for &di_dj in &neighbors[&k] {
-                            if poss.contains_key(&di_dj) && poss[&di_dj].contains(&n) {
-                                if let Some(set) = poss.get_mut(&di_dj) {
-                                    set.remove(&n);
-                                    updated = true;
-                                }
+                            if poss.contains_key(&di_dj) && ((poss[&di_dj] >> (n - 1)) % 2 == 1) {
+                                *poss.get_mut(&di_dj).unwrap() &= 0b111111111 - (1 << (n - 1));
+                                updated = true;
                             }
                         }
                     }
@@ -170,36 +173,44 @@ impl Sudoku {
             let mut min_len = 10; // max cannot exceed 9
             let mut min_k = 0;
 
-            for (&k, set) in &poss {
-                let len = set.len();
+            for (&k, &bitset) in &poss {
+                let len = (bitset as u64).count_ones();
                 if len < min_len {
                     min_len = len;
                     min_k = k;
                 }
             }
 
-            let values: Vec<u8> = poss[&min_k].iter().map(|&u| u).collect();
+            let mut values: Vec<u8> = Vec::new();
+            let mut p = poss[&min_k];
+            let mut bit = 1;
+            while p > 0 {
+                if p % 2 == 1 {
+                    values.push(bit);
+                }
+                bit += 1;
+                p = p >> 1;
+            }
+
             if values.is_empty() {
                 continue;
             }
 
             for &n in &values[1..] {
                 let mut new_state = state.copy();
-                let mut new_poss = FxHashMap::default();
-                for (&k, set) in &poss {
-                    new_poss.insert(k, set.clone());
-                }
                 new_state.data[min_k as usize] = n;
-                if let Some(set) = new_poss.get_mut(&min_k) {
-                    set.remove(&n);
+
+                let mut new_poss = FxHashMap::default();
+                for (&k, &bitset) in &poss {
+                    new_poss.insert(k, bitset);
                 }
+                *new_poss.get_mut(&min_k).unwrap() &= 0b111111111 - (1 << (n - 1));
+
                 stack.push((new_state, new_poss));
             }
 
             state.data[min_k as usize] = values[0];
-            if let Some(set) = poss.get_mut(&min_k) {
-                set.remove(&values[0]);
-            }
+            *poss.get_mut(&min_k).unwrap() &= 0b111111111 - (1 << (values[0] - 1));
             stack.push((state, poss));
         }
 

@@ -120,21 +120,16 @@ def solve(sudoku):
         # Find the place with fewest possibilities, and add those to the stack
         min_k = min(poss, key=lambda k: len(poss[k]))
 
-        # At this time we might have an empty poss value if the sudoku is wrong
-        values = list(poss[min_k])
-
-        # Processing all values but the first
-        for n in values[1:]:
+        for n in poss[min_k]:
             new_state = state.copy()
             new_state[min_k] = n
             new_poss = {k: v.copy() for k, v in poss.items()}
-            new_poss[min_k].remove(n)
-            stack.append((new_state, new_poss))
+            del new_poss[min_k]
+            for di_dj in neighbors[min_k]:
+                if di_dj in new_poss and n in new_poss[di_dj]:
+                    new_poss[di_dj].remove(n)
 
-        # For the first value no need to copy we can reuse the current state
-        state[min_k] = values[0]
-        poss[min_k].remove(values[0])
-        stack.append((state, poss))
+            stack.append((new_state, new_poss))
 
     raise ValueError("Not solvable")
 

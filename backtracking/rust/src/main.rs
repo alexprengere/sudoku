@@ -137,12 +137,18 @@ impl Sudoku {
         while !stack.is_empty() {
             let (mut state, mut poss) = stack.pop().unwrap();
 
-            loop {
-                let mut updated = false;
+            let mut stuck = false;
+            let mut backtrack = false;
+
+            while !stuck && !backtrack {
+                stuck = true;
                 let poss_keys: Vec<u8> = poss.keys().map(|&u| u).collect();
                 for &k in &poss_keys {
                     let set = poss.get(&k).unwrap();
-                    if set.len() == 1 {
+                    if set.len() == 0 {
+                        backtrack = true;
+                        break;
+                    } else if set.len() == 1 {
                         let n = *set.iter().next().unwrap();
                         state.data[k as usize] = n;
                         poss.remove(&k);
@@ -150,16 +156,16 @@ impl Sudoku {
                             if poss.contains_key(&di_dj) && poss[&di_dj].contains(&n) {
                                 if let Some(set) = poss.get_mut(&di_dj) {
                                     set.remove(&n);
-                                    updated = true;
+                                    stuck = false;
                                 }
                             }
                         }
                     }
                 }
+            }
 
-                if !updated {
-                    break;
-                }
+            if backtrack {
+                continue;
             }
 
             if poss.is_empty() {
@@ -179,28 +185,26 @@ impl Sudoku {
             }
 
             let values: Vec<u8> = poss[&min_k].iter().map(|&u| u).collect();
-            if values.is_empty() {
-                continue;
-            }
 
-            for &n in &values[1..] {
+            for &n in &values {
                 let mut new_state = state.copy();
                 let mut new_poss = FxHashMap::default();
                 for (&k, set) in &poss {
                     new_poss.insert(k, set.clone());
                 }
                 new_state.data[min_k as usize] = n;
-                if let Some(set) = new_poss.get_mut(&min_k) {
-                    set.remove(&n);
+                new_poss.remove(&min_k);
+                for &di_dj in &neighbors[&min_k] {
+                    if new_poss.contains_key(&di_dj) && new_poss[&di_dj].contains(&n) {
+                        if let Some(set) = new_poss.get_mut(&di_dj) {
+                            set.remove(&n);
+                        }
+                    }
                 }
+
+
                 stack.push((new_state, new_poss));
             }
-
-            state.data[min_k as usize] = values[0];
-            if let Some(set) = poss.get_mut(&min_k) {
-                set.remove(&values[0]);
-            }
-            stack.push((state, poss));
         }
 
         panic!("Not solvable");

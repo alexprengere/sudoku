@@ -1,4 +1,3 @@
-from __future__ import print_function
 import itertools
 
 
@@ -65,11 +64,12 @@ def get_neighbor_indices(k):
 def solve(sudoku):
     """Solves the Sudoku in place, or raises ValueError if not solvable."""
 
-    # List of possibilities for an index
+    # Possibilities for each index are represented as bits in an integer
+    # Bits 0 to 8 correspond to digits 1 to 9
     possibilities = {}
     for k in range(81):
         if k not in sudoku:
-            possibilities[k] = {1, 2, 3, 4, 5, 6, 7, 8, 9}
+            possibilities[k] = 0x1FF
     unknown = set(possibilities)
 
     # Mapping of indices that affects other indices
@@ -79,9 +79,10 @@ def solve(sudoku):
 
     # We remove the possibilities in same line/column/square
     for k, n in sudoku.items():
+        mask = 1 << (n - 1)
         for di_dj in neighbors[k]:
-            if n in possibilities[di_dj]:
-                possibilities[di_dj].remove(n)
+            if possibilities[di_dj] & mask:
+                possibilities[di_dj] &= ~mask
 
     stack = [(sudoku, possibilities)]
     while stack:
@@ -95,18 +96,19 @@ def solve(sudoku):
         while not stuck and not backtrack:
             stuck = True
             for k in list(poss):
-                p = poss[k]
-                if len(p) == 0:
+                bits = poss[k]
+                if bits == 0:
                     # No possibilities for this cell, we need to break out of both loops
                     # and backtrack
                     backtrack = True
                     break
-                elif len(p) == 1:
-                    state[k] = n = p.pop()
+                elif bits.bit_count() == 1:
+                    state[k] = n = bits.bit_length()
                     del poss[k]  # remove from the possibilities
+                    mask = 1 << (n - 1)
                     for di_dj in neighbors[k]:
-                        if di_dj in poss and n in poss[di_dj]:
-                            poss[di_dj].remove(n)
+                        if di_dj in poss and poss[di_dj] & mask:
+                            poss[di_dj] &= ~mask
                             stuck = False
 
         if backtrack:
@@ -118,16 +120,19 @@ def solve(sudoku):
             return
 
         # Find the place with fewest possibilities, and add those to the stack
-        min_k = min(poss, key=lambda k: (len(poss[k]), k))
+        min_k = min(poss, key=lambda k: (poss[k].bit_count(), k))
 
-        for n in sorted(poss[min_k]):
+        for n in range(1, 10):
+            mask = 1 << (n - 1)
+            if not poss[min_k] & mask:
+                continue
             new_state = state.copy()
             new_state[min_k] = n
-            new_poss = {k: v.copy() for k, v in poss.items()}
+            new_poss = poss.copy()
             del new_poss[min_k]
             for di_dj in neighbors[min_k]:
-                if di_dj in new_poss and n in new_poss[di_dj]:
-                    new_poss[di_dj].remove(n)
+                if di_dj in new_poss and new_poss[di_dj] & mask:
+                    new_poss[di_dj] &= ~mask
 
             stack.append((new_state, new_poss))
 

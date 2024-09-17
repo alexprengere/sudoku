@@ -90,18 +90,27 @@ def solve(sudoku):
         # First we sync the state with the latest changes of poss.
         # When the possibilities are reduced to 1 single value, we write to state
         # Then we loop to reduce other possibilities, and so on
-        while True:
-            updated = False
+        stuck = False
+        backtrack = False
+        while not stuck and not backtrack:
+            stuck = True
             for k in list(poss):
-                if len(poss[k]) == 1:
-                    state[k] = n = poss[k].pop()
+                p = poss[k]
+                if len(p) == 0:
+                    # No possibilities for this cell, we need to break out of both loops
+                    # and backtrack
+                    backtrack = True
+                    break
+                elif len(p) == 1:
+                    state[k] = n = p.pop()
                     del poss[k]  # remove from the possibilities
                     for di_dj in neighbors[k]:
                         if di_dj in poss and n in poss[di_dj]:
                             poss[di_dj].remove(n)
-                            updated = True
-            if not updated:
-                break
+                            stuck = False
+
+        if backtrack:
+            continue
 
         # No more possibilities means we finished it
         if not poss:
@@ -113,8 +122,6 @@ def solve(sudoku):
 
         # At this time we might have an empty poss value if the sudoku is wrong
         values = list(poss[min_k])
-        if not values:
-            continue
 
         # Processing all values but the first
         for n in values[1:]:

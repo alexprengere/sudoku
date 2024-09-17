@@ -1,11 +1,11 @@
+use rustc_hash::FxHashMap;
+use rustc_hash::FxHashSet;
 use std::env;
 use std::fs::File;
 use std::io;
 use std::io::prelude::*;
 use std::iter::FromIterator;
 use std::path::Path;
-use rustc_hash::FxHashMap;
-use rustc_hash::FxHashSet;
 
 struct Sudoku {
     data: [u8; 81],
@@ -50,7 +50,9 @@ impl Sudoku {
     }
 
     fn copy(&self) -> Sudoku {
-        Sudoku { data: self.data.clone() }
+        Sudoku {
+            data: self.data,
+        }
     }
 
     fn show(&self) {
@@ -95,7 +97,7 @@ impl Sudoku {
         let lj = (j / 3) * 3;
         for di in li..li + 3 {
             for dj in lj..lj + 3 {
-                if di != i && dj != j {
+                if di != i || dj != j {
                     indices.insert(di * 9 + dj);
                 }
             }
@@ -105,28 +107,28 @@ impl Sudoku {
     }
 
     fn solve(&mut self) {
-        let mut possibilities = FxHashMap::default();
+        let mut possibilities = FxHashMap::<u8, u16>::default();
         for k in 0..81 {
             if self.data[k as usize] == 0 {
-                let values: FxHashSet<u8> = FxHashSet::from_iter(1..10);
-                possibilities.insert(k, values);
+                possibilities.insert(k, 0b1_1111_1111); // All digits possible
             }
         }
-        let unknown: FxHashSet<u8> = possibilities.iter().map(|(&k, _)| k).collect();
+        let unknown: FxHashSet<u8> = possibilities.keys().copied().collect();
 
         let mut neighbors: FxHashMap<u8, FxHashSet<u8>> = FxHashMap::default();
         for k in 0..81 {
             let indices = Sudoku::get_neighbor_indices(k);
-            neighbors.insert(k, indices.intersection(&unknown).map(|&k| k).collect());
+            neighbors.insert(k, indices.intersection(&unknown).copied().collect());
         }
 
         for k in 0..81 {
             let n = self.data[k as usize];
             if n != 0 {
+                let mask = 1 << (n - 1);
                 for &di_dj in &neighbors[&k] {
-                    if possibilities[&di_dj].contains(&n) {
+                    if possibilities[&di_dj] & mask != 0 {
                         if let Some(set) = possibilities.get_mut(&di_dj) {
-                            set.remove(&n);
+                            *set &= !mask; // Remove digit n from possibilities
                         }
                     }
                 }
@@ -134,28 +136,27 @@ impl Sudoku {
         }
 
         let mut stack = vec![(self.copy(), possibilities)];
-        while !stack.is_empty() {
-            let (mut state, mut poss) = stack.pop().unwrap();
-
+        while let Some((mut state, mut poss)) = stack.pop() {
             let mut stuck = false;
             let mut backtrack = false;
 
             while !stuck && !backtrack {
                 stuck = true;
-                let poss_keys: Vec<u8> = poss.keys().map(|&u| u).collect();
+                let poss_keys: Vec<u8> = poss.keys().copied().collect();
                 for &k in &poss_keys {
-                    let set = poss.get(&k).unwrap();
-                    if set.len() == 0 {
+                    let set = poss[&k];
+                    if set == 0 {
                         backtrack = true;
                         break;
-                    } else if set.len() == 1 {
-                        let n = *set.iter().next().unwrap();
+                    } else if set.count_ones() == 1 {
+                        let n = set.trailing_zeros() as u8 + 1;
                         state.data[k as usize] = n;
                         poss.remove(&k);
+                        let mask = 1 << (n - 1);
                         for &di_dj in &neighbors[&k] {
-                            if poss.contains_key(&di_dj) && poss[&di_dj].contains(&n) {
-                                if let Some(set) = poss.get_mut(&di_dj) {
-                                    set.remove(&n);
+                            if poss.contains_key(&di_dj) && (poss[&di_dj] & mask) != 0 {
+                                if let Some(set_di_dj) = poss.get_mut(&di_dj) {
+                                    *set_di_dj &= !mask;
                                     stuck = false;
                                 }
                             }
@@ -176,33 +177,30 @@ impl Sudoku {
             let mut min_len = 10; // max cannot exceed 9
             let mut min_k = 0;
 
-            for (&k, set) in &poss {
-                let len = set.len();
-                if len < min_len {
+            for (&k, &set) in &poss {
+                let len = set.count_ones();
+                if (len, k) < (min_len, min_k) {
                     min_len = len;
                     min_k = k;
                 }
             }
 
-            let values: Vec<u8> = poss[&min_k].iter().map(|&u| u).collect();
-
-            for &n in &values {
-                let mut new_state = state.copy();
-                let mut new_poss = FxHashMap::default();
-                for (&k, set) in &poss {
-                    new_poss.insert(k, set.clone());
+            for n in 1..10 {
+                let mask = 1 << (n - 1);
+                if (poss[&min_k] & mask) == 0 {
+                    continue;
                 }
+                let mut new_state = state.copy();
+                let mut new_poss = poss.clone();
                 new_state.data[min_k as usize] = n;
                 new_poss.remove(&min_k);
                 for &di_dj in &neighbors[&min_k] {
-                    if new_poss.contains_key(&di_dj) && new_poss[&di_dj].contains(&n) {
-                        if let Some(set) = new_poss.get_mut(&di_dj) {
-                            set.remove(&n);
+                    if new_poss.contains_key(&di_dj) && (new_poss[&di_dj] & mask) != 0 {
+                        if let Some(set_di_dj) = new_poss.get_mut(&di_dj) {
+                            *set_di_dj &= !mask;
                         }
                     }
                 }
-
-
                 stack.push((new_state, new_poss));
             }
         }

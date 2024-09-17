@@ -118,9 +118,9 @@ def solve(sudoku):
             return
 
         # Find the place with fewest possibilities, and add those to the stack
-        min_k = min(poss, key=lambda k: len(poss[k]))
+        min_k = min(poss, key=lambda k: (len(poss[k]), k))
 
-        for n in poss[min_k]:
+        for n in sorted(poss[min_k]):
             new_state = state.copy()
             new_state[min_k] = n
             new_poss = {k: v.copy() for k, v in poss.items()}

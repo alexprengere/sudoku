@@ -166,10 +166,12 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("file")
+    parser.add_argument("files", nargs="+", help="Sudoku files to solve")
     args = parser.parse_args()
-    with open(args.file) as f:
-        sudoku = read(f)
-        solve(sudoku)
-        show(sudoku)
-        assert is_solved(sudoku)
+
+    for file in args.files:
+        with open(file) as f:
+            sudoku = read(f)
+            solve(sudoku)
+            show(sudoku)
+            assert is_solved(sudoku)
